@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Скачать проект
@@ -17,46 +17,53 @@ jobs:
       - name: Распаковать Velvet.zip
         run: |
           unzip -q Velvet.zip -d velvet-project
-          echo "Содержимое архива:"
-          find velvet-project -maxdepth 2 -type f | head -50
 
-      - name: Найти корень Gradle проекта
-        run: |
           if [ -f "velvet-project/gradlew" ]; then
             echo "PROJECT_DIR=velvet-project" >> "$GITHUB_ENV"
           elif [ -f "velvet-project/Velvet/gradlew" ]; then
             echo "PROJECT_DIR=velvet-project/Velvet" >> "$GITHUB_ENV"
           else
-            echo "Gradle wrapper не найден!"
+            echo "ОШИБКА: gradlew не найден"
+            find velvet-project -maxdepth 3 -type f | head -100
             exit 1
           fi
 
       - name: Установить Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Установить Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Установить Android SDK компоненты
+      - name: Настроить Android SDK
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          yes | sdkmanager --licenses >/dev/null || true
 
-      - name: Сделать Gradle executable
-        run: chmod +x "$PROJECT_DIR/gradlew"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-      - name: Собрать APK
+      - name: Проверить Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          java -version
+          adb --version
+          sdkmanager --list_installed | head -50
+
+      - name: Подготовить Gradle
+        run: |
+          chmod +x "$PROJECT_DIR/gradlew"
+
+      - name: Собрать Debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Найти APK
         run: |
-          echo "Найденные APK:"
-          find "$PROJECT_DIR" -type f -name "*.apk"
+          echo "APK:"
+          find "$PROJECT_DIR" -type f -name "*.apk" -print
 
       - name: Загрузить APK
         uses: actions/upload-artifact@v4
