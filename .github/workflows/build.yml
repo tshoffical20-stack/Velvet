@@ -34,35 +34,51 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Настроить Android SDK
-        run: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          yes | sdkmanager --licenses >/dev/null || true
+      - name: Установить Android SDK
+        uses: android-actions/setup-android@v4
 
-          sdkmanager \
+      - name: Добавить sdkmanager в PATH
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+
+          echo "SDK = $SDK"
+
+          find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -10
+
+          SDKMANAGER=$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ОШИБКА: sdkmanager не найден"
+            exit 1
+          fi
+
+          SDKMANAGER_DIR=$(dirname "$SDKMANAGER")
+          echo "$SDKMANAGER_DIR" >> "$GITHUB_PATH"
+
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
       - name: Проверить Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
+          which sdkmanager
+          sdkmanager --version
           java -version
-          adb --version
-          sdkmanager --list_installed | head -50
 
       - name: Подготовить Gradle
         run: |
           chmod +x "$PROJECT_DIR/gradlew"
 
-      - name: Собрать Debug APK
+      - name: Собрать APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Найти APK
         run: |
-          echo "APK:"
           find "$PROJECT_DIR" -type f -name "*.apk" -print
 
       - name: Загрузить APK
