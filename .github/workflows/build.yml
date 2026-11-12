@@ -1,0 +1,67 @@
+name: Build Velvet APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Скачать проект
+        uses: actions/checkout@v4
+
+      - name: Распаковать Velvet.zip
+        run: |
+          unzip -q Velvet.zip -d velvet-project
+          echo "Содержимое архива:"
+          find velvet-project -maxdepth 2 -type f | head -50
+
+      - name: Найти корень Gradle проекта
+        run: |
+          if [ -f "velvet-project/gradlew" ]; then
+            echo "PROJECT_DIR=velvet-project" >> "$GITHUB_ENV"
+          elif [ -f "velvet-project/Velvet/gradlew" ]; then
+            echo "PROJECT_DIR=velvet-project/Velvet" >> "$GITHUB_ENV"
+          else
+            echo "Gradle wrapper не найден!"
+            exit 1
+          fi
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Установить Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Установить Android SDK компоненты
+        run: |
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Сделать Gradle executable
+        run: chmod +x "$PROJECT_DIR/gradlew"
+
+      - name: Собрать APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Найти APK
+        run: |
+          echo "Найденные APK:"
+          find "$PROJECT_DIR" -type f -name "*.apk"
+
+      - name: Загрузить APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Velvet-APK
+          path: |
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/**/*.apk
+          if-no-files-found: error
